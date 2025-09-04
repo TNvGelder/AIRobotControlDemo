@@ -1,0 +1,6 @@
+@AIRobotControl.Server_HostAddress = http://localhost:5209
+
+GET {{AIRobotControl.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

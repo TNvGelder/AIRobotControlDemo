@@ -1,0 +1,49 @@
+{
+  "name": "AIRobotControl (.NET 9 + Node 20)",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:9.0",
+  "features": {
+    "ghcr.io/devcontainers/features/dotnet:2": {},
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
+  "postCreateCommand": [
+    "npm --prefix airobotcontrol.client ci",
+    "npx --prefix airobotcontrol.client playwright install --with-deps",
+    "dotnet dev-certs https --trust || true"
+  ],
+  "containerEnv": {
+    "DEVCONTAINER": "true",
+    "VITE_API_URL": "http://localhost:7038",
+    "VITE_USE_HTTPS": "false",
+    "VITE_HOST": "0.0.0.0",
+    "SPA_PROXY_SERVER_URL": "http://localhost:51164",
+    "ASPNETCORE_URLS": "http://0.0.0.0:7038",
+    "ASPNETCORE_ENVIRONMENT": "Development",
+    "ASPNETCORE_HOSTINGSTARTUPASSEMBLIES": "Microsoft.AspNetCore.SpaProxy"
+  },
+  "remoteEnv": {
+    "DEVCONTAINER": "true",
+    "ASPNETCORE_URLS": "http://0.0.0.0:7038"
+  },
+  "portsAttributes": {
+    "51164": { 
+      "label": "Vite (client)", 
+      "onAutoForward": "notify",
+      "protocol": "http"
+    },
+    "7038": { 
+      "label": "ASP.NET (server)", 
+      "onAutoForward": "notify",
+      "protocol": "http"
+    }
+  },
+  "forwardPorts": [51164, 7038],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csdevkit",
+        "bierner.markdown-mermaid",
+        "Upstash.context7-mcp"
+      ]
+    }
+  }
+}

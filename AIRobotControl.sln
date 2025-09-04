@@ -1,0 +1,39 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36203.30 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "airobotcontrol.client", "airobotcontrol.client\airobotcontrol.client.esproj", "{B6F0B4B0-6B5E-8511-0113-7FB5994FD91F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIRobotControl.Server", "AIRobotControl.Server\AIRobotControl.Server.csproj", "{111A5D62-BA2C-4D14-AC97-EFB987A6D3A9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIRobotControl.Server.Tests", "AIRobotControl.Server.Tests\AIRobotControl.Server.Tests.csproj", "{643BB227-88BD-4CB4-AA58-B1235667055B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B6F0B4B0-6B5E-8511-0113-7FB5994FD91F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B6F0B4B0-6B5E-8511-0113-7FB5994FD91F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B6F0B4B0-6B5E-8511-0113-7FB5994FD91F}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{B6F0B4B0-6B5E-8511-0113-7FB5994FD91F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B6F0B4B0-6B5E-8511-0113-7FB5994FD91F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B6F0B4B0-6B5E-8511-0113-7FB5994FD91F}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{111A5D62-BA2C-4D14-AC97-EFB987A6D3A9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{111A5D62-BA2C-4D14-AC97-EFB987A6D3A9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{111A5D62-BA2C-4D14-AC97-EFB987A6D3A9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{111A5D62-BA2C-4D14-AC97-EFB987A6D3A9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{643BB227-88BD-4CB4-AA58-B1235667055B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{643BB227-88BD-4CB4-AA58-B1235667055B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{643BB227-88BD-4CB4-AA58-B1235667055B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{643BB227-88BD-4CB4-AA58-B1235667055B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {812E8C9C-A2E7-42A6-A143-44D8CC160810}
+	EndGlobalSection
+EndGlobal

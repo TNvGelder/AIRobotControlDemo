@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Three.js Robots NPC Control Game — Possess NPCs, Blend Animations, Combat</title>
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; font-family: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:#0b1020; color:#e9eefc; }
+    #overlay { position: absolute; inset: 0; pointer-events: none; }
+    #ui { position: absolute; left: 12px; top: 12px; width: 320px; max-height: calc(100% - 24px); background: rgba(8,14,34,.76); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.35); padding: 12px; pointer-events: auto; overflow: auto; backdrop-filter: blur(6px); }
+    #ui h1 { font-size: 16px; margin: 0 0 8px; letter-spacing: .2px; }
+    #ui .sub { font-size: 12px; opacity: .8; margin: 0 0 8px; }
+    #ui .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    #ui button { appearance: none; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.06); color: #e9eefc; border-radius: 10px; padding: 6px 10px; font-size: 12px; cursor: pointer; transition:.15s; }
+    #ui button:hover { background: rgba(255,255,255,.12); }
+    #ui button.primary { border-color: #6ea8ff; background: #1d2959; }
+    #ui .tag { font-size: 11px; opacity: .8; padding: 2px 6px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12); }
+    #ui .list { display: grid; gap: 6px; }
+    #ui .card { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; background: rgba(255,255,255,.04); }
+
+    #help { position: absolute; right: 12px; top: 12px; pointer-events: auto; width: 360px; max-width: calc(100% - 24px); }
+    #help .help-card { padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.08); background: rgba(8,14,34,.76); backdrop-filter: blur(6px); }
+    #help .kbd { display:inline-block; border:1px solid rgba(255,255,255,.18); border-bottom-width: 2px; padding: 0 6px; border-radius: 6px; font-weight:600; font-size:12px; background: rgba(255,255,255,.08); }
+    #status { font-size: 12px; opacity: .85; margin-top: 8px; }
+
+    #toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: 18px; pointer-events: none; }
+    #toast div { background: rgba(8,14,34,.9); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 10px 14px; font-size: 13px; }
+
+    a { color: #8dc2ff; text-decoration: none; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.167.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.167.1/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="overlay">
+    <div id="ui">
+      <h1>🤖 Robots Playground</h1>
+      <p class="sub">Right-drag to rotate camera • Mouse wheel to zoom • Click to attack • WASD/Arrows to move • <span class="kbd">Shift</span> sprint • <span class="kbd">Space</span> jump</p>
+      <div class="row"><span class="tag" id="controlledTag">Controlling: —</span><button id="camFollowBtn" title="Toggle camera follow" class="primary">Camera Follow: On</button></div>
+      <div class="list" id="npcList"></div>
+    </div>
+    <div id="help">
+      <div class="help-card">
+        <strong>Goal</strong>: Possess any robot and try bonking another — they will fight back. All characters (player/NPC) share the same movement and animation system with smooth crossfades.
+        <div id="status">Loading…</div>
+      </div>
+    </div>
+    <div id="toast" style="display:none;"><div id="toastMsg"></div></div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+    // One global clock
+    const clock = new THREE.Clock();
+
+    // ---------------------------
+    // Basic scene setup
+    // ---------------------------
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b1020);
+    scene.fog = new THREE.Fog(0x0b1020, 40, 140);
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.position.set(0, 8, 18);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enablePan = false; // rotate + zoom only
+    controls.maxPolarAngle = Math.PI * 0.49;
+    controls.minDistance = 6;
+    controls.maxDistance = 60;
+    // Right mouse to rotate; left is free for attacks
+    controls.mouseButtons = { LEFT: null, MIDDLE: null, RIGHT: THREE.MOUSE.ROTATE };
+
+    renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    const hemi = new THREE.HemisphereLight(0x98c1ff, 0x383838, 2.5);
+    hemi.position.set(0, 40, 0);
+    scene.add(hemi);
+
+    const dir = new THREE.DirectionalLight(0xffffff, 2.0);
+    dir.position.set(20, 30, 10);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.camera.top = 50;
+    dir.shadow.camera.bottom = -50;
+    dir.shadow.camera.left = -50;
+    dir.shadow.camera.right = 50;
+    dir.shadow.camera.near = 1;
+    dir.shadow.camera.far = 120;
+    scene.add(dir);
+
+    // Ground
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x132149, roughness: 0.95, metalness: 0.0 });
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(160, 96), groundMat);
+    ground.receiveShadow = true;
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // Rings for depth
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0x1b2d63, roughness: 0.9 });
+    for (let r = 20; r <= 140; r += 20) {
+      const tor = new THREE.Mesh(new THREE.TorusGeometry(r, 0.25, 8, 128), ringMat);
+      tor.rotation.x = Math.PI / 2;
+      tor.receiveShadow = true; tor.castShadow = true;
+      scene.add(tor);
+    }
+
+    // ---------------------------
+    // UI helpers
+    // ---------------------------
+    const $ = (sel) => document.querySelector(sel);
+    const npcList = $('#npcList');
+    const statusEl = $('#status');
+    const controlledTag = $('#controlledTag');
+    const camFollowBtn = $('#camFollowBtn');
+
+    let cameraFollow = true;
+    camFollowBtn.addEventListener('click', () => {
+      cameraFollow = !cameraFollow;
+      camFollowBtn.textContent = `Camera Follow: ${cameraFollow ? 'On' : 'Off'}`;
+      toast(`Camera follow ${cameraFollow ? 'enabled' : 'disabled'}.`);
+    });
+
+    function toast(msg) {
+      const wrap = document.getElementById('toast');
+      const div = document.getElementById('toastMsg');
+      div.textContent = msg;
+      wrap.style.display = 'block';
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => wrap.style.display = 'none', 1600);
+    }
+
+    // ---------------------------
+    // Character Controller
+    // ---------------------------
+    const BOUNDS_RADIUS = 70; // NPCs wander in a disc
+
+    const ACTION_KEYS = {
+      idle: ['idle', 'standing', 'stand'],
+      walk: ['walk', 'walking'],
+      run: ['run', 'running', 'sprint'],
+      jump: ['jump'],
+      attack: ['punch', 'attack', 'hit', 'swing'],
+      death: ['death', 'die'],
+      yes: ['yes', 'thumbsup'],
+      no: ['no', 'headShake'],
+      wave: ['wave'],
+    };
+
+    function findClip(animations, hints) {
+      const names = animations.map(a => a.name.toLowerCase());
+      for (const hint of hints) {
+        const i = names.findIndex(n => n.includes(hint.toLowerCase()));
+        if (i !== -1) return animations[i];
+      }
+      return null;
+    }
+
+    function buildHealthbar(width = 1.8, height = 0.22) {
+      const group = new THREE.Group();
+      const geo = new THREE.PlaneGeometry(width, height);
+      const bg = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x461e2e, transparent: true, opacity: 0.85 }));
+      const fgGeo = new THREE.PlaneGeometry(width, height);
+      const fg = new THREE.Mesh(fgGeo, new THREE.MeshBasicMaterial({ color: 0x3ef38a, transparent: true, opacity: 0.95 }));
+      fg.position.z = 0.001; // avoid z-fighting
+      fg.position.x = -width/2; // anchor left
+      fg.scale.x = 1.0; // health ratio
+      const frame = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2, side: THREE.DoubleSide, wireframe: true }));
+      frame.position.z = 0.002;
+      group.add(bg, fg, frame);
+      group.fg = fg;
+      group.visible = true;
+      return group;
+    }
+
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+    function randRange(a, b) { return a + Math.random() * (b - a); }
+
+    class Character {
+      constructor({ base, name, position }) {
+        this.name = name;
+        this.root = SkeletonUtils.clone(base.scene);
+        this.root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+        this.root.position.copy(position || new THREE.Vector3());
+        scene.add(this.root);
+
+        this.mixer = new THREE.AnimationMixer(this.root);
+        this.animations = base.animations;
+        this.actions = {};
+
+        this.clips = {
+          idle: findClip(this.animations, ACTION_KEYS.idle) || this.animations[0],
+          walk: findClip(this.animations, ACTION_KEYS.walk) || findClip(this.animations, ACTION_KEYS.idle) || this.animations[0],
+          run: findClip(this.animations, ACTION_KEYS.run) || findClip(this.animations, ACTION_KEYS.walk) || this.animations[0],
+          jump: findClip(this.animations, ACTION_KEYS.jump),
+          attack: findClip(this.animations, ACTION_KEYS.attack) || findClip(this.animations, ACTION_KEYS.wave) || findClip(this.animations, ACTION_KEYS.yes),
+          death: findClip(this.animations, ACTION_KEYS.death),
+        };
+
+        for (const [key, clip] of Object.entries(this.clips)) {
+          if (clip) {
+            const action = this.mixer.clipAction(clip);
+            if (key === 'jump' || key === 'attack' || key === 'death') {
+              action.clampWhenFinished = true; action.loop = THREE.LoopOnce;
+            }
+            this.actions[key] = action;
+          }
+        }
+
+        // Morph targets (RobotExpressive has expressions)
+        this.faceMesh = null;
+        this.morphDict = null;
+        this.root.traverse(o => {
+          if (o.morphTargetDictionary && !this.faceMesh) { this.faceMesh = o; this.morphDict = o.morphTargetDictionary; }
+        });
+
+        // Health
+        this.maxHealth = 100;
+        this.health = this.maxHealth;
+        this.healthbar = buildHealthbar();
+        this.healthbar.position.y = 2.4;
+        this.root.add(this.healthbar);
+        const bbox = new THREE.Box3().setFromObject(this.root);
+        const height = bbox.max.y - bbox.min.y;
+        if (isFinite(height) && height > 0) this.healthbar.position.y = height + 0.35;
+
+        // Movement state
+        this.velocity = new THREE.Vector3();
+        this.moveDir = new THREE.Vector3();
+        this.speedWalk = 3.2;
+        this.speedRun = 6.2;
+        this.isSprinting = false;
+        this.grounded = true;
+        this.vy = 0;
+        this.gravity = 18;
+
+        // AI
+        this.isPlayer = false;
+        this.aiWanderTarget = null; // Vector3
+        this.enemyTarget = null; // Character
+        this.attackCooldown = 0;
+
+        // Start idle
+        this.play('idle', 0.001);
+      }
+
+      setEmotion(name, weight = 1, duration = 0.25) {
+        if (!this.faceMesh || !this.morphDict) return;
+        const keys = Object.keys(this.morphDict);
+        const idx = keys.findIndex(k => k.toLowerCase().includes(name.toLowerCase()));
+        if (idx >= 0) {
+          const target = this.faceMesh.morphTargetInfluences[idx];
+          const start = target ?? 0;
+          let t = 0;
+          const animateInfluence = () => {
+            t += clock.getDelta();
+            const a = clamp(t / duration, 0, 1);
+            this.faceMesh.morphTargetInfluences[idx] = start + (weight - start) * a;
+            if (a < 1) requestAnimationFrame(animateInfluence);
+          };
+          animateInfluence();
+        }
+      }
+
+      clearEmotions(duration = 0.3) {
+        if (!this.faceMesh || !this.morphDict) return;
+        const infl = this.faceMesh.morphTargetInfluences;
+        const start = infl.map(v => v || 0);
+        let t = 0;
+        const animateInfluence = () => {
+          t += clock.getDelta();
+          const a = clamp(t / duration, 0, 1);
+          for (let i = 0; i < infl.length; i++) infl[i] = start[i] * (1 - a);
+          if (a < 1) requestAnimationFrame(animateInfluence);
+        };
+        animateInfluence();
+      }
+
+      play(name, fade = 0.2, timeScale = 1) {
+        const action = this.actions[name];
+        if (!action) return;
+        if (this.currentAction === action) return;
+        if (this.currentAction) this.currentAction.fadeOut(fade);
+        action.reset();
+        action.setEffectiveTimeScale(timeScale).setEffectiveWeight(1).fadeIn(fade).play();
+        this.currentAction = action;
+      }
+
+      setHealth(h) {
+        this.health = clamp(h, 0, this.maxHealth);
+        const ratio = this.health / this.maxHealth;
+        this.healthbar.fg.scale.x = clamp(ratio, 0, 1);
+        this.healthbar.fg.position.x = -0.9 + 0.9 * ratio;
+        if (this.health <= 0) {
+          if (this.actions.death) this.play('death', 0.1);
+          this.dead = true;
+          this.enemyTarget = null;
+        }
+      }
+
+      damage(amount, attacker) {
+        if (this.dead) return;
+        this.setHealth(this.health - amount);
+        this.setEmotion('angry', 1, 0.18);
+        setTimeout(() => this.clearEmotions(), 500);
+        if (!this.isPlayer && attacker && !attacker.dead) { this.enemyTarget = attacker; }
+      }
+
+      tryAttack(target) {
+        if (!target || target.dead) return;
+        if (this.attackCooldown > 0) return;
+        const dist = this.root.position.distanceTo(target.root.position);
+        if (dist < 2.2) {
+          if (this.actions.attack) this.play('attack', 0.1);
+          target.damage(randRange(8, 18), this);
+          this.attackCooldown = 0.7; // seconds
+        }
+      }
+
+      update(delta, cameraQuat) {
+        if (this.dead) {
+          this.mixer.update(delta);
+          if (cameraQuat) this.healthbar.quaternion.copy(cameraQuat);
+          return;
+        }
+        if (this.attackCooldown > 0) this.attackCooldown -= delta;
+
+        // Gravity / jump
+        if (!this.grounded) {
+          this.vy -= this.gravity * delta;
+          this.root.position.y += this.vy * delta;
+          if (this.root.position.y <= 0) {
+            this.root.position.y = 0; this.grounded = true; this.vy = 0;
+          }
+        }
+
+        if (!this.isPlayer) this._aiThink();
+
+        const speed = (this.isSprinting ? this.speedRun : this.speedWalk);
+        const moveLen = this.moveDir.length();
+        if (moveLen > 0.001) {
+          const dir = this.moveDir.clone().normalize();
+          const step = dir.multiplyScalar(speed * delta);
+          this.root.position.add(step);
+          const p = this.root.position;
+          if (p.length() > BOUNDS_RADIUS) p.setLength(BOUNDS_RADIUS - 0.1);
+          const facing = Math.atan2(this.moveDir.x, this.moveDir.z);
+          const targetQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), facing);
+          this.root.quaternion.slerp(targetQuat, 1 - Math.pow(0.0001, delta));
+          const fast = this.isSprinting || moveLen > 0.6;
+          if (fast && this.actions.run) this.play('run', 0.08);
+          else if (this.actions.walk) this.play('walk', 0.08);
+        } else {
+          this.play('idle', 0.2);
+        }
+
+        if (this.enemyTarget && !this.enemyTarget.dead) {
+          const to = this.enemyTarget.root.position.clone().sub(this.root.position);
+          const dist = to.length();
+          if (dist > 2.0) { this.moveDir.copy(to.normalize()); }
+          else { this.moveDir.set(0,0,0); this.tryAttack(this.enemyTarget); }
+        }
+
+        if (cameraQuat) this.healthbar.quaternion.copy(cameraQuat);
+        this.mixer.update(delta);
+        if (this.isPlayer) this.moveDir.set(0,0,0);
+      }
+
+      _aiThink() {
+        if (this.enemyTarget && !this.enemyTarget.dead) return;
+        if (!this.aiWanderTarget || this.root.position.distanceTo(this.aiWanderTarget) < 1.0) {
+          if (Math.random() < 0.2) { this.moveDir.set(0,0,0); return; }
+          const angle = Math.random() * Math.PI * 2;
+          const radius = randRange(10, BOUNDS_RADIUS - 8);
+          const x = Math.cos(angle) * radius;
+          const z = Math.sin(angle) * radius;
+          this.aiWanderTarget = new THREE.Vector3(x, 0, z);
+        }
+        const to = this.aiWanderTarget.clone().sub(this.root.position);
+        this.moveDir.copy(to.setY(0).normalize());
+        this.isSprinting = false;
+      }
+
+      jump() { if (!this.grounded) return; this.grounded = false; this.vy = 8.5; if (this.actions.jump) this.play('jump', 0.05, 1.2); }
+    }
+
+    // ---------------------------
+    // Load models and spawn
+    // ---------------------------
+    const loader = new GLTFLoader();
+    loader.setCrossOrigin('anonymous');
+
+    const MODEL_SPECS = [
+      { key: 'RobotExpressive', url: 'https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb', scale: 1.0 },
+      { key: 'Xbot', url: 'https://threejs.org/examples/models/gltf/Xbot.glb', scale: 1.0 },
+      { key: 'Soldier', url: 'https://threejs.org/examples/models/gltf/Soldier.glb', scale: 1.0 },
+    ];
+
+    const BASES = new Map();
+    async function loadBase(spec) {
+      if (BASES.has(spec.key)) return BASES.get(spec.key);
+      const gltf = await new Promise((resolve, reject) => loader.load(spec.url, resolve, undefined, reject));
+      gltf.scene.scale.setScalar(spec.scale || 1);
+      const base = { scene: gltf.scene, animations: gltf.animations, key: spec.key };
+      BASES.set(spec.key, base);
+      return base;
+    }
+
+    const characters = [];
+    let player = null;
+
+    async function spawnAll() {
+      statusEl.textContent = 'Loading models from threejs.org…';
+      const bases = await Promise.all(MODEL_SPECS.map(loadBase));
+      statusEl.textContent = 'Spawning characters…';
+
+      const spawnPoints = [
+        new THREE.Vector3(-10,0,-10),
+        new THREE.Vector3( 12,0,-8),
+        new THREE.Vector3(-8,0, 12),
+      ];
+
+      for (let i = 0; i < bases.length; i++) {
+        const base = bases[i];
+        const c = new Character({ base, name: base.key, position: spawnPoints[i] || new THREE.Vector3(randRange(-6,6),0,randRange(-6,6)) });
+        characters.push(c);
+      }
+
+      const extra = new Character({ base: bases[1], name: 'Xbot_2', position: new THREE.Vector3(8,0,8) });
+      characters.push(extra);
+      const extra2 = new Character({ base: bases[0], name: 'RobotExpressive_2', position: new THREE.Vector3(-14,0,6) });
+      characters.push(extra2);
+
+      setControlled(characters[0]);
+      refreshNpcList();
+      statusEl.textContent = 'Ready — possess, move, and fight!';
+      toast('Left-click a target to attack. They will fight back.');
+    }
+
+    function refreshNpcList() {
+      npcList.innerHTML = '';
+      characters.forEach((c) => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `<div><strong>${c.name}</strong></div>`;
+        const btn = document.createElement('button');
+        btn.textContent = 'Take Control';
+        btn.onclick = () => setControlled(c);
+        div.appendChild(btn);
+        npcList.appendChild(div);
+      });
+    }
+
+    function setControlled(c) {
+      if (player) player.isPlayer = false;
+      player = c; c.isPlayer = true; c.enemyTarget = null;
+      $('#controlledTag').textContent = `Controlling: ${c.name}`;
+      controls.target.copy(c.root.position).y += 1.5; controls.update();
+      toast(`You are now controlling ${c.name}.`);
+    }
+
+    // ---------------------------
+    // Input handling
+    // ---------------------------
+    const keyState = new Map();
+    window.addEventListener('keydown', (e) => { keyState.set(e.code, true); });
+    window.addEventListener('keyup',   (e) => { keyState.set(e.code, false); });
+
+    function updatePlayerInput() {
+      if (!player || player.dead) return;
+      let forward = 0, strafe = 0;
+      if (keyState.get('KeyW') || keyState.get('ArrowUp')) forward += 1;
+      if (keyState.get('KeyS') || keyState.get('ArrowDown')) forward -= 1;
+      if (keyState.get('KeyA') || keyState.get('ArrowLeft')) strafe -= 1;
+      if (keyState.get('KeyD') || keyState.get('ArrowRight')) strafe += 1;
+
+      const camDir = new THREE.Vector3();
+      camera.getWorldDirection(camDir);
+      camDir.y = 0; camDir.normalize();
+      const camRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), camDir).normalize().negate();
+      const move = camDir.multiplyScalar(forward).add(camRight.multiplyScalar(strafe));
+      if (move.lengthSq() > 0) player.moveDir.copy(move.normalize());
+
+      player.isSprinting = !!(keyState.get('ShiftLeft') || keyState.get('ShiftRight'));
+      if ((keyState.get('Space') || keyState.get('Numpad0')) && player.grounded) player.jump();
+    }
+
+    // Click to attack (raycast)
+    const raycaster = new THREE.Raycaster();
+    const tmp2 = new THREE.Vector2();
+
+    renderer.domElement.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== 0) return; // left click
+      if (!player || player.dead) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      tmp2.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+      tmp2.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(tmp2, camera);
+      const meshes = [];
+      for (const c of characters) { if (c === player) continue; c.root.traverse(o => { if (o.isMesh) meshes.push(o); }); }
+      const hits = raycaster.intersectObjects(meshes, true);
+      if (hits.length > 0) {
+        let target = null; const hitObj = hits[0].object;
+        for (const c of characters) {
+          if (c === player) continue;
+          let p = hitObj; while (p && p !== scene) { if (p === c.root) { target = c; break; } p = p.parent; }
+          if (target) break;
+        }
+        if (target) { player.enemyTarget = target; toast(`Engaging ${target.name}!`); }
+      }
+    });
+
+    // ---------------------------
+    // Main loop
+    // ---------------------------
+    function animate() {
+      const dt = clock.getDelta();
+      updatePlayerInput();
+      for (const c of characters) c.update(dt, camera.quaternion);
+      if (player && cameraFollow) {
+        const tgt = player.root.position.clone(); tgt.y += 1.5;
+        controls.target.lerp(tgt, 1 - Math.pow(0.0001, dt));
+        controls.update();
+      }
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Kick off
+    spawnAll().then(() => animate());
+  </script>
+</body>
+</html>
