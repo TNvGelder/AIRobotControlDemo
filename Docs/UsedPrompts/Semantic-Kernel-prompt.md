@@ -1,0 +1,8 @@
+- First step, use context7 to find the needed documentation on microsofts semantic kernal and prompty. 
+- Use GPT5-nano from openrouter in semantic kernel with a prompty template.
+- Semantic kernel has official support for MCP, use that to connect it to our MCP and make robots chat and do actions.
+- Where needed get yourself familiar with the codebase
+- Make it possible to disable the semantic kernel with a boolean.
+- Every robot should have their own cheap AI
+- Use tests again to validate your solution work
+ - I want integration tests as well that communicate with free openrouter models and those tests should pass.  I want test driven development, focus on getting the semantic kernal connection to openrouter etc working first etc.
